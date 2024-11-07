@@ -38,86 +38,86 @@ display_help() {
 }
 
 while true; do
-    if [ $# -eq 0 ];then
-    echo $#
-    break
+    if [ $# -eq 0 ]; then
+        echo $#
+        break
     fi
     case "$1" in
-        -h | --help)
-            display_help
-            exit 0
-            ;;
-        -a | --arch)
+    -h | --help)
+        display_help
+        exit 0
+        ;;
+    -a | --arch)
         ARCH=$2
-            shift 2
-            ;;
-        -d | --distribution)
+        shift 2
+        ;;
+    -d | --distribution)
         RELEASE=$2
-            shift 2
-            ;;
-        -f | --feature)
+        shift 2
+        ;;
+    -f | --feature)
         FEATURE=$2
-            shift 2
-            ;;
-        -n | --hostname)
+        shift 2
+        ;;
+    -n | --hostname)
         IMG_HOSTNAME=$2
-            shift 2
-            ;;
-        -s | --seek)
+        shift 2
+        ;;
+    -s | --seek)
         SEEK=$(($2 - 1))
-            shift 2
-            ;;
-        -p | --add-perf)
+        shift 2
+        ;;
+    -p | --add-perf)
         PERF=true
-            shift 1
-            ;;
-        -*)
-            echo "Error: Unknown option: $1" >&2
-            exit 1
-            ;;
-        *)  # No more options
-            break
-            ;;
+        shift 1
+        ;;
+    -*)
+        echo "Error: Unknown option: $1" >&2
+        exit 1
+        ;;
+    *) # No more options
+        break
+        ;;
     esac
 done
 
 # Handle cases where qemu and Debian use different arch names
 case "$ARCH" in
-    ppc64le)
-        DEBARCH=ppc64el
-        ;;
-    aarch64)
-        DEBARCH=arm64
-        ;;
-    arm)
-        DEBARCH=armel
-        ;;
-    x86_64)
-        DEBARCH=amd64
-        ;;
-    *)
-        DEBARCH=$ARCH
-        ;;
+ppc64le)
+    DEBARCH=ppc64el
+    ;;
+aarch64)
+    DEBARCH=arm64
+    ;;
+arm)
+    DEBARCH=armel
+    ;;
+x86_64)
+    DEBARCH=amd64
+    ;;
+*)
+    DEBARCH=$ARCH
+    ;;
 esac
 
 # Foreign architecture
 
 FOREIGN=false
-if [ $ARCH != $(uname -m) ]; then
+if [ "$ARCH" != "$(uname -m)" ]; then
     # i386 on an x86_64 host is exempted, as we can run i386 binaries natively
-    if [ $ARCH != "i386" -o $(uname -m) != "x86_64" ]; then
+    if [ "$ARCH" != "i386" ] || [ "$(uname -m)" != "x86_64" ]; then
         FOREIGN=true
     fi
 fi
 
 if [ $FOREIGN = "true" ]; then
     # Check for according qemu static binary
-    if ! which qemu-$ARCH-static; then
+    if ! which qemu-"$ARCH"-static; then
         echo "Please install qemu static binary for architecture $ARCH (package 'qemu-user-static' on Debian/Ubuntu/Fedora)"
         exit 1
     fi
     # Check for according binfmt entry
-    if [ ! -r /proc/sys/fs/binfmt_misc/qemu-$ARCH ]; then
+    if [ ! -r /proc/sys/fs/binfmt_misc/qemu-"$ARCH" ]; then
         echo "binfmt entry /proc/sys/fs/binfmt_misc/qemu-$ARCH does not exist"
         exit 1
     fi
@@ -130,7 +130,7 @@ if [ $PERF = "true" ] && [ -z ${KERNEL+x} ]; then
 fi
 
 # If full feature is chosen, install more packages
-if [ $FEATURE = "full" ]; then
+if [ "$FEATURE" = "full" ]; then
     PREINSTALL_PKGS=$PREINSTALL_PKGS","$ADD_PACKAGE
 fi
 
@@ -147,15 +147,16 @@ fi
 
 # riscv64 is hosted in the debian-ports repository
 # debian-ports doesn't include non-free, so we exclude firmware-atheros
-if [ $DEBARCH == "riscv64" ]; then
+if [ "$DEBARCH" == "riscv64" ]; then
     DEBOOTSTRAP_PARAMS="--keyring /usr/share/keyrings/debian-ports-archive-keyring.gpg --exclude firmware-atheros $DEBOOTSTRAP_PARAMS http://deb.debian.org/debian-ports"
 fi
-sudo --preserve-env=http_proxy,https_proxy,ftp_proxy,no_proxy debootstrap $DEBOOTSTRAP_PARAMS
+sudo --preserve-env=http_proxy,https_proxy,ftp_proxy,no_proxy debootstrap "$DEBOOTSTRAP_PARAMS"
 
 # 2. debootstrap stage: only necessary if target != host architecture
 
 if [ $FOREIGN = "true" ]; then
-    sudo cp $(which qemu-$ARCH-static) $DIR/$(which qemu-$ARCH-static)
+    qemu="$(which qemu-"$ARCH"-static)"
+    sudo cp "$qemu" "$DIR/$qemu"
     sudo chroot $DIR /bin/bash -c "/debootstrap/debootstrap --second-stage"
 fi
 
@@ -168,21 +169,23 @@ echo 'debugfs /sys/kernel/debug debugfs defaults 0 0' | sudo tee -a $DIR/etc/fst
 echo 'securityfs /sys/kernel/security securityfs defaults 0 0' | sudo tee -a $DIR/etc/fstab
 echo 'configfs /sys/kernel/config/ configfs defaults 0 0' | sudo tee -a $DIR/etc/fstab
 echo 'binfmt_misc /proc/sys/fs/binfmt_misc binfmt_misc defaults 0 0' | sudo tee -a $DIR/etc/fstab
+echo 'sysfs           /sys        sysfs       defaults        0 0' | sudo tee -a $DIR/etc/fstab
+echo 'tmpfs           /dev/shm    tmpfs       defaults        0 0' | sudo tee -a $DIR/etc/fstab
 echo -en "127.0.0.1\tlocalhost\n" | sudo tee $DIR/etc/hosts
-echo "nameserver 8.8.8.8" | sudo tee -a $DIR/etc/resolve.conf
-echo $IMG_HOSTNAME | sudo tee $DIR/etc/hostname
-ssh-keygen -f $RELEASE.id_rsa -t rsa -N ''
+echo "nameserver 8.8.8.8" | sudo tee -a $DIR/etc/resolv.conf
+echo "$IMG_HOSTNAME" | sudo tee $DIR/etc/hostname
+ssh-keygen -f "$RELEASE".id_rsa -t rsa -N ''
 sudo mkdir -p $DIR/root/.ssh/
-cat $RELEASE.id_rsa.pub | sudo tee $DIR/root/.ssh/authorized_keys
+cat "$RELEASE".id_rsa.pub | sudo tee $DIR/root/.ssh/authorized_keys
 
 # Add perf support
 if [ $PERF = "true" ]; then
-    cp -r $KERNEL $DIR/tmp/
-    BASENAME=$(basename $KERNEL)
+    cp -r "$KERNEL" $DIR/tmp/
+    BASENAME=$(basename "$KERNEL")
     sudo chroot $DIR /bin/bash -c "apt-get update; apt-get install -y flex bison python-dev libelf-dev libunwind8-dev libaudit-dev libslang2-dev libperl-dev binutils-dev liblzma-dev libnuma-dev"
     sudo chroot $DIR /bin/bash -c "cd /tmp/$BASENAME/tools/perf/; make"
     sudo chroot $DIR /bin/bash -c "cp /tmp/$BASENAME/tools/perf/perf /usr/bin/"
-    rm -r $DIR/tmp/$BASENAME
+    rm -r $DIR/tmp/"$BASENAME"
 fi
 
 # Add udev rules for custom drivers.
@@ -190,9 +193,9 @@ fi
 echo 'ATTR{name}=="vim2m", SYMLINK+="vim2m"' | sudo tee -a $DIR/etc/udev/rules.d/50-udev-default.rules
 
 # Build a disk image
-dd if=/dev/zero of=$RELEASE.img bs=1M seek=$SEEK count=1
-sudo mkfs.ext4 -F $RELEASE.img
+dd if=/dev/zero of="$RELEASE".img bs=1M seek=$SEEK count=1
+sudo mkfs.ext4 -F "$RELEASE".img
 sudo mkdir -p /mnt/$DIR
-sudo mount -o loop $RELEASE.img /mnt/$DIR
+sudo mount -o loop "$RELEASE".img /mnt/$DIR
 sudo cp -a $DIR/. /mnt/$DIR/.
 sudo umount /mnt/$DIR
