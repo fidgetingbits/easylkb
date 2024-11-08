@@ -219,6 +219,7 @@ class Kbuilder:
             os.mkdir(self.ImgPath)  # this should create the dir, needs testing
         except FileExistsError:
             self.logb("warn", "Dir exists, skipping...")
+        cmdret = self.run(["chmod", "+w", f"{self.ImgPath}kernel/create-image.sh"])
         cmdret = self.run(["cp", f"{self.BaseDir}kernel/create-image.sh", self.ImgPath])
         if cmdret != 0:
             self.logb("warn", "Error copying create-image.sh.")
@@ -226,6 +227,7 @@ class Kbuilder:
         cmdret = self.run(
             [f"{self.ImgPath}create-image.sh", "-n", self.KHostname], rcwd=self.ImgPath
         )
+        print(cmdret)
         if cmdret != 0:
             self.logb("fail", "Error running create-image.sh.")
             sys.exit(1)
