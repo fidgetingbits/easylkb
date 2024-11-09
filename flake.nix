@@ -10,7 +10,6 @@
       nixpkgs,
       ...
     }:
-
     let
       pkgs = nixpkgs.legacyPackages.x86_64-linux;
       lib = pkgs.lib;
@@ -19,10 +18,10 @@
       makeWrapper = pkgs.writeTextFile {
         name = "make-wrapper";
         executable = true;
+        # Building older kernels will fail with PIE enabled, and newer gcc enables it by default
         text = ''
           #!${pkgs.bash}/bin/bash
           export KCFLAGS="-fno-pie -fno-stack-protector"
-          export KAFLAGS="-fno-pie"
           exec make "$@"
         '';
       };
@@ -31,13 +30,13 @@
         name = "kernel-build-env";
         targetPkgs =
           pkgs:
-          (builtins.attrValues {
+          lib.flatten [
+            (builtins.attrValues {
             inherit (pkgs)
               python3
               pkg-config
               gnumake
               ncurses
-
               binutils
               linuxHeaders
               libelf
@@ -47,32 +46,26 @@
               strace
               gcc
               ;
-
-            inherit (pkgs.openssl) dev;
             inherit (pkgs.qt5) qtbase;
-            inherit (pkgs.linux) nativeBuildInputs;
-          });
+          })
+          pkgs.linux.nativeBuildInputs
+          pkgs.openssl.dev
+          ];
         runScript = "${makeWrapper}";
       };
       easylkb-source = stdenv.mkDerivation {
         pname = pname;
+        # FIXME: Tweak the version
         version = "0-unstable-2024-04-03";
-        # src = pkgs.fetchFromGitHub {
-        #   owner = "fidgetingbits";
-        #   repo = "easylkb";
-        #   rev = "788f623f300df15e7f37e0e63c4622fbe0961f6e";
-        #   sha256 = "sha256-vc8BRWolE01+OPLkVxNaG0Kxm0rH+Y+y0w9TeftJQms=";
-        # };
-        src = builtins.fetchGit {
-          url = "file:///home/aa/dev/easylkb"; # Path to your local repo
-        };
-
+        # FIXME: Use lib.fileset
+        src = ./.;
+        # FIXME: Most of these tweaks aren't necessary in my fork
         patchPhase = ''
           sed -i 's,/bin/bash,${pkgs.bash}/bin/bash,g' ./easylkb.py
           # The calls to make must be within the FHS build environment instead
           sed -i 's,"make","${fhsEnv}/bin/kernel-build-env",g' ./easylkb.py
           # 2GB is not enough in practice
-          sed -i 's/SEEK=2047/SEEK=4095/g' ./kernel/create-image.sh
+          # sed -i 's/SEEK=2047/SEEK=4095/g' ./kernel/create-image.sh
         '';
         installPhase = ''
           pwd
@@ -80,7 +73,7 @@
           # Copy the main script and resource directories
           cp ./${pname}.py $out/share/
           cp -r config $out/share/
-          # Nix installs this as r-x, but a script will try to overwrite a copy of it, so make it writable
+          # Nix installs this as r-x, but create-image.sh tries to overwrite a copy of it, so make it writable
           chmod +w kernel/create-image.sh
           cp -r kernel $out/share/
         '';

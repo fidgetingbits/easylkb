@@ -19,7 +19,7 @@ fi
 ARCH=$(uname -m)
 RELEASE=bullseye
 FEATURE=minimal
-SEEK=8191
+SEEK=2047
 PERF=false
 IMG_HOSTNAME="localhost"
 
@@ -134,39 +134,30 @@ if [ "$FEATURE" = "full" ]; then
     PREINSTALL_PKGS=$PREINSTALL_PKGS","$ADD_PACKAGE
 fi
 
-# Do to some errors related to copying the chroot files into the created image, sometimes I just want to skip this step,
-# and move straight to the copy. So ask the user if they want to skip the debootstrap stage.
+sudo rm -rf $DIR
+sudo mkdir -p $DIR
+sudo chmod 0755 $DIR
 
-echo "Do you want to skip the debootstrap stage? (y/n)"
-read -r skip_debootstrap
-if [ "$skip_debootstrap" = "y" ]; then
-    echo "Skipping debootstrap stage"
-else
-    sudo rm -rf $DIR
-    sudo mkdir -p $DIR
-    sudo chmod 0755 $DIR
+# 1. debootstrap stage
 
-    # 1. debootstrap stage
+DEBOOTSTRAP_PARAMS="--arch=$DEBARCH --include=$PREINSTALL_PKGS --components=main,contrib,non-free,non-free-firmware $RELEASE $DIR"
+if [ $FOREIGN = "true" ]; then
+    DEBOOTSTRAP_PARAMS="--foreign $DEBOOTSTRAP_PARAMS"
+fi
 
-    DEBOOTSTRAP_PARAMS="--arch=$DEBARCH --include=$PREINSTALL_PKGS --components=main,contrib,non-free,non-free-firmware $RELEASE $DIR"
-    if [ $FOREIGN = "true" ]; then
-        DEBOOTSTRAP_PARAMS="--foreign $DEBOOTSTRAP_PARAMS"
-    fi
+# riscv64 is hosted in the debian-ports repository
+# debian-ports doesn't include non-free, so we exclude firmware-atheros
+if [ "$DEBARCH" == "riscv64" ]; then
+    DEBOOTSTRAP_PARAMS="--keyring /usr/share/keyrings/debian-ports-archive-keyring.gpg --exclude firmware-atheros $DEBOOTSTRAP_PARAMS http://deb.debian.org/debian-ports"
+fi
+# shellcheck disable=SC2086
+sudo --preserve-env=http_proxy,https_proxy,ftp_proxy,no_proxy debootstrap $DEBOOTSTRAP_PARAMS
 
-    # riscv64 is hosted in the debian-ports repository
-    # debian-ports doesn't include non-free, so we exclude firmware-atheros
-    if [ "$DEBARCH" == "riscv64" ]; then
-        DEBOOTSTRAP_PARAMS="--keyring /usr/share/keyrings/debian-ports-archive-keyring.gpg --exclude firmware-atheros $DEBOOTSTRAP_PARAMS http://deb.debian.org/debian-ports"
-    fi
-    # shellcheck disable=SC2086
-    sudo --preserve-env=http_proxy,https_proxy,ftp_proxy,no_proxy debootstrap $DEBOOTSTRAP_PARAMS
-
-    # 2. debootstrap stage: only necessary if target != host architecture
-    if [ $FOREIGN = "true" ]; then
-        qemu="$(which qemu-"$ARCH"-static)"
-        sudo cp "$qemu" "$DIR/$qemu"
-        sudo chroot $DIR /bin/bash -c "/debootstrap/debootstrap --second-stage"
-    fi
+# 2. debootstrap stage: only necessary if target != host architecture
+if [ $FOREIGN = "true" ]; then
+    qemu="$(which qemu-"$ARCH"-static)"
+    sudo cp "$qemu" "$DIR/$qemu"
+    sudo chroot $DIR /bin/bash -c "/debootstrap/debootstrap --second-stage"
 fi
 
 # Set some defaults and enable promptless ssh to the machine for root.
