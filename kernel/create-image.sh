@@ -140,7 +140,7 @@ sudo chmod 0755 $DIR
 
 # 1. debootstrap stage
 
-DEBOOTSTRAP_PARAMS="--arch=$DEBARCH --include=$PREINSTALL_PKGS --components=main,contrib,non-free,non-free-firmware $RELEASE $DIR"
+DEBOOTSTRAP_PARAMS="${DEBOOTSTRAP_PARAMS:-} --arch=$DEBARCH --include=$PREINSTALL_PKGS --components=main,contrib,non-free,non-free-firmware $RELEASE $DIR"
 if [ $FOREIGN = "true" ]; then
     DEBOOTSTRAP_PARAMS="--foreign $DEBOOTSTRAP_PARAMS"
 fi
@@ -151,7 +151,7 @@ if [ "$DEBARCH" == "riscv64" ]; then
     DEBOOTSTRAP_PARAMS="--keyring /usr/share/keyrings/debian-ports-archive-keyring.gpg --exclude firmware-atheros $DEBOOTSTRAP_PARAMS http://deb.debian.org/debian-ports"
 fi
 # shellcheck disable=SC2086
-sudo --preserve-env=http_proxy,https_proxy,ftp_proxy,no_proxy debootstrap $DEBOOTSTRAP_PARAMS
+sudo --preserve-env=http_proxy,https_proxy,ftp_proxy,no_proxy debootstrap $DEBOOTSTRAP_PARAMS ${DEBOOTSTRAP_MIRROR:-}
 
 # 2. debootstrap stage: only necessary if target != host architecture
 if [ $FOREIGN = "true" ]; then
