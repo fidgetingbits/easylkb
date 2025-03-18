@@ -9,10 +9,18 @@ import shutil
 
 
 class Kbuilder:
-    def __init__(self, KConfig=None, KPath=None, KVersion="", KHostname="localhost"):
+    def __init__(
+        self,
+        KConfig=None,
+        KPath=None,
+        KVersion="",
+        KHostname="localhost",
+        KPort="10021",
+    ):
         self.BaseDir = os.getcwd() + "/"
         self.LogDir = self.BaseDir + "log/"
         self.KVersion = KVersion  # The kernel version
+        self.KPort = KPort
         if KConfig is not None:
             self.KConfig = KConfig
         else:
@@ -40,7 +48,9 @@ class Kbuilder:
         self.runkScript += f" -kernel {self.KPath}/arch/x86/boot/bzImage"
         self.runkScript += ' -append "console=ttyS0 root=/dev/sda earlyprintk=serial net.ifnames=0 nokaslr"'
         self.runkScript += f" -drive file={self.ImgPath}bullseye.img,format=raw"
-        self.runkScript += " -net user,host=10.0.2.10,hostfwd=tcp:127.0.0.1:10021-:22"
+        self.runkScript += (
+            f" -net user,host=10.0.2.10,hostfwd=tcp:127.0.0.1:{self.KPort}-:22"
+        )
         self.runkScript += " -net nic,model=e1000"
         self.runkScript += " -nographic"
         self.runkScript += " -enable-kvm"
@@ -219,11 +229,11 @@ class Kbuilder:
             os.mkdir(self.ImgPath)  # this should create the dir, needs testing
         except FileExistsError:
             self.logb("warn", "Dir exists, skipping...")
-        cmdret = self.run(["chmod", "+w", f"{self.ImgPath}kernel/create-image.sh"])
         cmdret = self.run(["cp", f"{self.BaseDir}kernel/create-image.sh", self.ImgPath])
         if cmdret != 0:
             self.logb("warn", "Error copying create-image.sh.")
             # sys.exit(1)
+        cmdret = self.run(["chmod", "+w", f"{self.ImgPath}kernel/create-image.sh"])
         cmdret = self.run(
             [f"{self.ImgPath}create-image.sh", "-n", self.KHostname], rcwd=self.ImgPath
         )
@@ -261,7 +271,7 @@ if __name__ == "__main__":
         "-p", dest="KPath", help="Path to Linux kernel, use instead of -k"
     )
     parser.add_argument(
-        "--kconfig", dest="KConfig", help="KConfig, default is example.KConfig"
+        "--kconfig", dest="KConfig", help="KConfig, default is config/example.KConfig"
     )
     # Actions
     parser.add_argument(
@@ -294,6 +304,12 @@ if __name__ == "__main__":
         action="store_true",
         help="Do All: Download (or use source specified by -p), Configure, Compile, Build Image, and Run Image",
     )
+    parser.add_argument(
+        "--ssh-port",
+        dest="sshPort",
+        default="10021",
+        help="Localhost port to forward SSH to on the qemu host",
+    )
     args = parser.parse_args()
 
     if args.KVersion is None and args.KPath is None:
@@ -303,7 +319,13 @@ if __name__ == "__main__":
     myKVersion = args.KVersion
     myKPath = args.KPath
     myKConfig = args.KConfig
-    Kb = Kbuilder(KVersion=myKVersion, KPath=myKPath, KConfig=myKConfig)
+    myKPort = args.sshPort
+    if int(myKPort) < 1 or int(myKPort) > 65535:
+        print(
+            f"Error: Invalid SSH port number {myKPort}. It must be between 1 and 65535."
+        )
+        exit(1)
+    Kb = Kbuilder(KVersion=myKVersion, KPath=myKPath, KConfig=myKConfig, KPort=myKPort)
 
     if args.DoAll:
         if myKPath is not None:
