@@ -26,30 +26,30 @@
         '';
       };
       # This is only for use by the make scripts, which has unpatchable FHS path expectations
-      fhsEnv = pkgs.buildFHSUserEnv {
+      fhsEnv = pkgs.buildFHSEnv {
         name = "kernel-build-env";
         targetPkgs =
           pkgs:
           lib.flatten [
             (builtins.attrValues {
-            inherit (pkgs)
-              python3
-              pkg-config
-              gnumake
-              ncurses
-              binutils
-              linuxHeaders
-              libelf
-              flex
-              bison
-              gdb
-              strace
-              gcc
-              ;
-            inherit (pkgs.qt5) qtbase;
-          })
-          pkgs.linux.nativeBuildInputs
-          pkgs.openssl.dev
+              inherit (pkgs)
+                python3
+                pkg-config
+                gnumake
+                ncurses
+                binutils
+                linuxHeaders
+                libelf
+                flex
+                bison
+                gdb
+                strace
+                gcc
+                ;
+              inherit (pkgs.qt5) qtbase;
+            })
+            pkgs.linux.nativeBuildInputs
+            pkgs.openssl.dev
           ];
         runScript = "${makeWrapper}";
       };
