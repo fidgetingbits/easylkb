@@ -9,6 +9,8 @@ import shutil
 
 
 class Kbuilder:
+    DEFAULT_KCONFIG = "config/example.KConfig"
+
     def __init__(
         self,
         KConfig=None,
@@ -24,7 +26,7 @@ class Kbuilder:
         if KConfig is not None:
             self.KConfig = KConfig
         else:
-            self.KConfig = "config/example.KConfig"  # Default KConfig location
+            self.KConfig = self.DEFAULT_KCONFIG  # Default KConfig location
         if KPath is not None:
             self.KPath = KPath
         else:
@@ -204,6 +206,14 @@ class Kbuilder:
             f"{self.KPath}.config", "a+"
         )  # This is the config file to write
         ConfigFile.write(KConfigFile.read())
+
+        # If we're using a non-default KConfig, there are still certain important values in the default KConfig we want
+        # so add them also
+        if self.KConfig != self.DEFAULT_KCONFIG:
+            DefaultKConfigFile = open(self.DEFAULT_KCONFIG, "r")
+            ConfigFile.write(DefaultKConfigFile.read())
+            DefaultKConfigFile.close()
+
         ConfigFile.close()
         KConfigFile.close()
 
